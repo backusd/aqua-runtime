@@ -1,0 +1,55 @@
+BasedOnStyle: LLVM
+
+Language: Cpp
+Standard: c++23
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+ColumnLimit: 100
+
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+BreakBeforeBraces: Allman
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+SortIncludes: true
+IncludeBlocks: Regroup
+
+IncludeCategories:
+  - Regex: '^<.*>'
+    Priority: 1
+  - Regex: '^"aqua/'
+    Priority: 2
+  - Regex: '.*'
+    Priority: 3
+
+NamespaceIndentation: All
+
+SpaceBeforeParens: ControlStatements
+
+SpacesInAngles: false
+SpacesInContainerLiterals: false
+
+AlignConsecutiveDeclarations: true
+AlignConsecutiveAssignments: true
+
+DerivePointerAlignment: false
+
+AllowShortBlocksOnASingleLine: Never
+
+BinPackArguments: false
+BinPackParameters: false
+
+PenaltyBreakBeforeFirstCallParameter: 19
+
+Cpp11BracedListStyle: true
+
+FixNamespaceComments: true
+
+ReflowComments: true
