@@ -1,162 +1,270 @@
-Generate the initial runtime skeleton for the Aqua Runtime.
+Modify the Aqua Runtime architecture to split the Platform abstraction
+into two separate concepts:
 
-The Aqua Runtime is a C++23 portable runtime that runs deterministic
-applications across multiple platforms including WebAssembly and native
-desktop environments.
+    Platform  -> OS services and event pumping
+    Window    -> individual window instance
 
-Important design requirements:
+This pattern is used in professional engines to keep platform APIs small
+and to support multiple windows and headless operation in the future.
 
-- This repository contains NO platform specific code.
-- Platforms are implemented in separate repositories such as aqua-platform-web.
-- The runtime must remain fully platform independent.
+Before generating code, re-read:
 
-Documentation:
+    docs/architecture.md
 
-- The architecture for this project is documented in docs/architecture.md
-- Re-read docs/architecture.md before generating any code
+Follow the architecture described there and update it where necessary.
 
 Changes I made that you need to be aware of:
+- In event.hpp, I added a "bool handled" flag to "struct Event" as well as methods "mark_handled" and "is_handled"
 
-- In the root CMakeLists.txt, I set the default AQUA_RUNTIME_BUILD_TESTS and AQUA_RUNTIME_BUILD_EXAMPLES values to OFF
+==================================================
+GOAL
+==================================================
+
+Introduce a new Window interface and update Platform so that it creates
+Window instances rather than representing the window itself.
+
+This change prepares the runtime for:
+
+- multiple windows
+- headless mode
+- renderer attachments to windows
+- better separation between OS services and window management
 
 
-Architecture overview:
+==================================================
+NEW FILES TO CREATE
+==================================================
 
-Core components:
+Create a new public header:
 
-1. Application
-   Represents the root application instance.
-   Responsible for lifecycle management and frame updates.
+include/aqua/platform/window.hpp
 
-2. Event System
-   Defines platform-independent events such as:
-   - mouse events
-   - keyboard events
-   - window resize events
-   - lifecycle events
+The interface should look roughly like:
 
-3. Platform Interface
-   The runtime interacts with platforms through an abstract interface.
-   Platform implementations will translate native events into Aqua events.
+namespace aqua::platform {
 
-4. Runtime
-   Coordinates the application, event queue, and platform.
-
-Frame model:
-
-Each frame executes in this order:
-
-    process events
-    update application
-    render
-
-Coding requirements:
-
-- Use C++23
-- Use modern C++ best practices
-- Use const correctness
-- Use constexpr where appropriate
-- Use noexcept where possible
-- Use [[nodiscard]] where appropriate
-- Avoid macros
-- Avoid global state
-- Prefer std::unique_ptr for ownership
-- Use enum class for events
-- Use std::variant or a clean type system for event payloads
-
-File organization:
-
-Public headers go in:
-
-    include/aqua/
-
-Implementation files go in:
-
-    src/
-
-Create the following components:
-
-include/aqua/application/application.hpp
-include/aqua/events/event.hpp
-include/aqua/events/event_queue.hpp
-include/aqua/platform/platform.hpp
-include/aqua/runtime/runtime.hpp
-
-src/application.cpp
-src/event_queue.cpp
-src/runtime.cpp
-
-Class design:
-
-Application
-
-class Application
+class Window
 {
 public:
-    virtual ~Application() = default;
+    virtual ~Window() = default;
 
-    virtual void on_event(const Event& event) noexcept;
-    virtual void update(double delta_time) noexcept;
-    virtual void render() noexcept;
+    [[nodiscard]] virtual std::uint32_t width() const noexcept = 0;
+    [[nodiscard]] virtual std::uint32_t height() const noexcept = 0;
+
+    virtual void set_title(const char* title) noexcept = 0;
 };
 
-Event
+}
 
-Define a type-safe event system with:
+This interface must be completely platform-independent.
 
-enum class EventType
 
-Event struct containing event type and payload.
+==================================================
+MODIFY PLATFORM INTERFACE
+==================================================
 
-EventQueue
+Update:
 
-Thread-safe not required yet.
+include/aqua/platform/platform.hpp
 
-Simple FIFO queue.
 
-Platform
+Platform should represent OS-level services:
 
-Abstract interface implemented by platform layers.
+- event polling
+- time
+- window creation
+
+
+Updated interface should include:
 
 class Platform
 {
 public:
     virtual ~Platform() = default;
 
+    virtual void set_event_queue(events::EventQueue*) noexcept = 0;
+
     virtual void poll_events() noexcept = 0;
-    virtual double time() const noexcept = 0;
+
+    [[nodiscard]] virtual double time() const noexcept = 0;
+
+    [[nodiscard]] virtual std::unique_ptr<platform::Window>
+    create_window(std::uint32_t width,
+                  std::uint32_t height,
+                  const char* title) = 0;
 };
 
-Runtime
 
-Coordinates the system.
+Important:
 
-class Runtime
-{
-public:
-    Runtime(std::unique_ptr<Platform> platform,
-            std::unique_ptr<Application> application);
+- Platform owns no windows
+- Windows are returned as std::unique_ptr
+- The runtime or application may store the window
 
-    void run() noexcept;
 
-private:
-    void process_events() noexcept;
+==================================================
+ADD FRAMESTART EVENT
+==================================================
 
-    std::unique_ptr<Platform> m_platform;
-    std::unique_ptr<Application> m_application;
+Add a new event type:
 
-    EventQueue m_event_queue;
-};
+EventType::FrameStart
 
-Runtime::run() should:
+This should be emitted once at the beginning of each frame.
 
-while running:
+Why this is important:
+
+Some platforms (especially browsers) do not allow the runtime to drive
+the frame loop directly. Instead, the platform triggers frames through
+a callback such as requestAnimationFrame.
+
+By introducing a FrameStart event now, the runtime can later support
+both models:
+
+Runtime-driven loop:
+
+    poll_events
+    process_events
+    update
+    render
+
+Platform-driven loop:
+
+    platform signals FrameStart
+    runtime performs update/render
+
+For now:
+
+Runtime should enqueue FrameStart at the beginning of each frame before
+update() is called.
+
+Applications may ignore it for now.
+
+
+==================================================
+EVENT SYSTEM CHANGES
+==================================================
+
+Modify:
+
+include/aqua/events/event.hpp
+
+Add:
+
+    EventType::FrameStart
+
+FrameStart should not require a payload.
+
+
+==================================================
+RUNTIME LOOP CHANGE
+==================================================
+
+Update Runtime::run() so that each frame does:
 
     platform->poll_events()
+
+    enqueue FrameStart event
+
     process_events()
+
     application->update(delta_time)
+
     application->render()
 
-Design the code to be minimal but clean and extensible.
 
-All code should compile and follow modern C++ design practices.
+FrameStart should be delivered through the existing event queue.
+
+
+==================================================
+README UPDATES
+==================================================
+
+Update README.md in the following ways:
+
+1. Architecture section
+
+Add description of the new Window interface and its relationship to
+Platform.
+
+Explain that:
+
+    Platform = OS integration
+    Window   = window instance
+
+2. Frame model section
+
+Update the frame sequence to:
+
+    Platform::poll_events()
+    FrameStart event emitted
+    Runtime::process_events()
+    Application::update()
+    Application::render()
+
+3. Platform integration section
+
+Document that platform implementations must implement BOTH:
+
+    Platform
+    Window
+
+and that Platform::create_window() returns a platform-specific Window.
+
+Example explanation:
+
+Win32Platform -> creates Win32Window
+CocoaPlatform -> creates CocoaWindow
+WebPlatform   -> creates BrowserWindow
+
+
+==================================================
+CODING REQUIREMENTS
+==================================================
+
+Continue following the existing code style and design:
+
+- C++23
+- const correctness
+- constexpr where appropriate
+- noexcept where appropriate
+- [[nodiscard]] where appropriate
+- avoid macros
+- avoid global state
+- use std::unique_ptr for ownership
+- maintain clear header/source separation
+
+
+==================================================
+DO NOT CHANGE
+==================================================
+
+Do NOT modify the following concepts:
+
+- Application interface
+- EventQueue API
+- the basic Event struct design
+- repository directory structure
+- namespace layout
+- build system (CMake)
+- deterministic single-threaded model
+
+Do NOT introduce:
+
+- platform-specific headers
+- OS APIs
+- windowing libraries
+- threading primitives
+
+
+==================================================
+EXPECTED RESULT
+==================================================
+
+After this change:
+
+- Platform provides OS services
+- Window represents a window instance
+- Runtime emits FrameStart each frame
+- Platform repos will implement both Platform and Window
+- Aqua Runtime remains fully platform-independent

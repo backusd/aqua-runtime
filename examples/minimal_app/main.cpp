@@ -62,6 +62,14 @@ public:
 		return std::chrono::duration_cast<Seconds>(now - m_start).count();
 	}
 
+	[[nodiscard]] std::unique_ptr<aqua::platform::Window> create_window(
+		std::uint32_t,
+		std::uint32_t,
+		const char*) override
+	{
+		return nullptr;
+	}
+
 private:
 	aqua::events::EventQueue* m_queue{nullptr};
 	std::chrono::steady_clock::time_point m_start{};

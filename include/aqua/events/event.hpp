@@ -9,6 +9,7 @@ namespace aqua::events {
 enum class EventType : std::uint8_t
 {
 	Unknown = 0,
+	FrameStart,
 	Quit,
 
 	MouseMove,
@@ -89,9 +90,26 @@ struct Event
 	EventType type{EventType::Unknown};
 	EventPayload payload{};
 
+	bool handled{false};
+
+	constexpr void mark_handled() noexcept
+	{
+		handled = true;
+	}
+
+	[[nodiscard]] constexpr bool is_handled() const noexcept
+	{
+		return handled;
+	}
+
 	[[nodiscard]] static constexpr Event quit() noexcept
 	{
 		return Event{EventType::Quit, std::monostate{}};
+	}
+
+	[[nodiscard]] static constexpr Event frame_start() noexcept
+	{
+		return Event{EventType::FrameStart, std::monostate{}};
 	}
 
 	[[nodiscard]] static constexpr Event mouse_move(double x, double y) noexcept

@@ -47,6 +47,14 @@ public:
 
 	[[nodiscard]] double time() const noexcept override { return 0.0; }
 
+	[[nodiscard]] std::unique_ptr<aqua::platform::Window> create_window(
+		std::uint32_t,
+		std::uint32_t,
+		const char*) override
+	{
+		return nullptr;
+	}
+
 private:
 	aqua::events::EventQueue* m_queue{nullptr};
 	bool m_sent_quit{false};

@@ -1,7 +1,11 @@
 
 #pragma once
 
+#include <cstdint>
+#include <memory>
+
 #include "aqua/events/event_queue.hpp"
+#include "aqua/platform/window.hpp"
 
 namespace aqua {
 
@@ -16,6 +20,11 @@ public:
 
 	virtual void poll_events() noexcept = 0;
 	[[nodiscard]] virtual double time() const noexcept = 0;
+
+	[[nodiscard]] virtual std::unique_ptr<platform::Window> create_window(
+		std::uint32_t width,
+		std::uint32_t height,
+		const char* title) = 0;
 };
 
 } // namespace aqua

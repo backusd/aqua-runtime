@@ -42,7 +42,8 @@ The runtime is built from four core concepts:
 
 - **`Application`**: user code; receives events and runs update/render.
 - **Event system**: platform-independent event types and payloads.
-- **`Platform`**: abstract interface implemented by platform layers.
+- **`Platform`**: OS services and event pumping.
+- **`Window`**: an individual window instance created by the platform.
 - **`Runtime`**: coordinates polling, event processing, and frame steps.
 
 The platform layer is responsible for translating native events (DOM, Win32, Cocoa, X11/Wayland, etc.) into Aqua events and enqueueing them.
@@ -52,9 +53,10 @@ The platform layer is responsible for translating native events (DOM, Win32, Coc
 Each frame executes in this order:
 
 1. `Platform::poll_events()`
-2. `Runtime::process_events()` (drains the event queue FIFO)
-3. `Application::update(delta_time)`
-4. `Application::render()`
+2. `FrameStart` event is emitted (enqueued by the runtime)
+3. `Runtime::process_events()` (drains the event queue FIFO)
+4. `Application::update(delta_time)`
+5. `Application::render()`
 
 The runtime exits its loop when it receives an `EventType::Quit`.
 
@@ -64,7 +66,10 @@ Platform integrations are expected to live in their own repositories and link ag
 
 ### The contract
 
-In your platform repo, implement [`aqua::Platform`](include/aqua/platform/platform.hpp):
+In your platform repo, implement both:
+
+- [`aqua::Platform`](include/aqua/platform/platform.hpp) (OS services + window creation)
+- [`aqua::platform::Window`](include/aqua/platform/window.hpp) (window instance)
 
 - `set_event_queue(events::EventQueue* queue) noexcept`
   - The runtime calls this once during `Runtime` construction.
@@ -80,6 +85,11 @@ In your platform repo, implement [`aqua::Platform`](include/aqua/platform/platfo
 - `time() const noexcept -> double`
   - Return a monotonic time value in **seconds**.
   - The runtime computes `delta_time` as `max(0, time() - last_time)`.
+
+- `create_window(width, height, title) -> std::unique_ptr<platform::Window>`
+  - Create a new window instance.
+  - Platform owns no windows; ownership transfers to the runtime/application.
+  - The returned object is platform-specific (e.g. `Win32Window`, `CocoaWindow`, `BrowserWindow`).
 
 ### Minimal pseudo-code
 
@@ -99,8 +109,25 @@ public:
 		return ...;
 	}
 
+	std::unique_ptr<aqua::platform::Window> create_window(
+		std::uint32_t width,
+		std::uint32_t height,
+		const char* title) override {
+		return std::make_unique<MyWindow>(width, height, title);
+	}
+
 private:
 	aqua::events::EventQueue* queue = nullptr; // non-owning
+};
+
+class MyWindow final : public aqua::platform::Window {
+public:
+	std::uint32_t width() const noexcept override { return w; }
+	std::uint32_t height() const noexcept override { return h; }
+	void set_title(const char* title) noexcept override { /* platform-specific */ }
+private:
+	std::uint32_t w{};
+	std::uint32_t h{};
 };
 ```
 
@@ -137,6 +164,7 @@ Events are defined in [`aqua::events`](include/aqua/events/event.hpp) as:
 
 Event creation helpers exist on `Event`:
 
+- `Event::frame_start()`
 - `Event::quit()`
 - `Event::mouse_move(x, y)`
 - `Event::mouse_button(button, state)`

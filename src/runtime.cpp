@@ -28,6 +28,7 @@ void Runtime::run() noexcept
 	while (m_running)
 	{
 		m_platform->poll_events();
+		m_event_queue.push(events::Event::frame_start());
 		process_events();
 
 		if (!m_running)

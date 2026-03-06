@@ -153,6 +153,8 @@ Platform implementations translate native events into Aqua events.
 
 Platform implementations provide functionality such as:
 
+- OS-level event polling
+- Time
 - Window creation
 - Input events
 - Frame scheduling
@@ -167,6 +169,32 @@ aqua-platform-desktop
 
 The runtime communicates with platforms only through abstract interfaces.
 
+### Platform vs Window
+
+The runtime splits OS integration into two concepts:
+
+- **Platform**: OS-level services (event pumping, time, window creation)
+- **Window**: an individual window instance
+
+This keeps the Platform API small, and prepares the runtime for:
+
+- multiple windows
+- headless operation
+- renderer attachments per-window (future)
+
+---
+
+## Window Interface
+
+The `Window` interface represents an individual window instance created by a platform implementation.
+
+Responsibilities:
+
+- expose size (width/height)
+- provide minimal window controls (e.g. title)
+
+The runtime owns no platform-specific windowing code; window instances are created by platform repositories and returned to the runtime/application via `std::unique_ptr`.
+
 ---
 
 ## Frame Execution Model
@@ -176,9 +204,11 @@ Aqua applications operate using a frame-based execution model.
 Each frame executes:
 
 ```
-1. Process Events
-2. Update Application State
-3. Render
+1. Platform Poll Events
+2. Emit FrameStart Event
+3. Process Events
+4. Update Application State
+5. Render
 ```
 
 This model works consistently across:
@@ -244,7 +274,7 @@ Aqua Event
     ↓
 Runtime Event Queue
     ↓
-Application::handle_event()
+Application::on_event()
 ```
 
 ---
